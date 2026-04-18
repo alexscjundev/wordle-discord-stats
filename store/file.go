@@ -1,6 +1,8 @@
 package store
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -18,23 +20,42 @@ func NewFileStore(path string) *FileStore {
 }
 
 func (f *FileStore) load() ([]WordleResult, error) {
-	data, err := os.ReadFile(f.path)
+	file, err := os.Open(f.path)
 	if os.IsNotExist(err) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
+	defer file.Close()
+
 	var results []WordleResult
-	return results, json.Unmarshal(data, &results)
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := bytes.TrimSpace(scanner.Bytes())
+		if len(line) == 0 {
+			continue
+		}
+		var r WordleResult
+		if err := json.Unmarshal(line, &r); err != nil {
+			return nil, err
+		}
+		results = append(results, r)
+	}
+	return results, scanner.Err()
 }
 
 func (f *FileStore) persist(results []WordleResult) error {
-	data, err := json.Marshal(results)
-	if err != nil {
-		return err
+	var buf bytes.Buffer
+	for _, r := range results {
+		line, err := json.Marshal(r)
+		if err != nil {
+			return err
+		}
+		buf.Write(line)
+		buf.WriteByte('\n')
 	}
-	return os.WriteFile(f.path, data, 0644)
+	return os.WriteFile(f.path, buf.Bytes(), 0644)
 }
 
 func (f *FileStore) Save(result WordleResult) (bool, error) {
