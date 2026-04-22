@@ -50,12 +50,12 @@ func (d *Daemon) Run() {
 }
 
 func (d *Daemon) postReport() {
-	entries, err := d.store.QueryTop(5, 0, store.ScoringAverage, d.nicks.ResolveIdentity)
+	entries, err := d.store.QueryTop(5, 0, store.ScoringAverage)
 	if err != nil {
 		slog.Error("postReport: query", "err", err)
 		return
 	}
-	msg := buildHeader(time.Now()) + "**Top 5 (all time)**\n" + store.FormatTop(entries)
+	msg := buildHeader(time.Now()) + "**Top 5 (all time)**\n" + store.FormatTop(entries, d.nicks.Get)
 	if _, err := d.session.ChannelMessageSend(d.channelID, msg); err != nil {
 		slog.Error("postReport: send", "err", err)
 	}

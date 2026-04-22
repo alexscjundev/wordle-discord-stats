@@ -21,7 +21,7 @@ func (b *Bot) handleStats(s *discordgo.Session, i *discordgo.InteractionCreate) 
 		scoringType = store.ScoringType(v.StringValue())
 	}
 
-	result, err := b.store.QueryStats(userID, sinceDay, scoringType, b.nicks.ResolveIdentity)
+	result, err := b.store.QueryStats(userID, sinceDay, scoringType)
 	var msg string
 	if err != nil {
 		msg = fmt.Sprintf("error: %v", err)
@@ -48,12 +48,12 @@ func (b *Bot) handleTop(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		scoringType = store.ScoringType(v.StringValue())
 	}
 
-	results, err := b.store.QueryTop(k, sinceDay, scoringType, b.nicks.ResolveIdentity)
+	results, err := b.store.QueryTop(k, sinceDay, scoringType)
 	var msg string
 	if err != nil {
 		msg = fmt.Sprintf("error: %v", err)
 	} else {
-		msg = store.FormatTop(results)
+		msg = store.FormatTop(results, b.nicks.Get)
 	}
 
 	_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
