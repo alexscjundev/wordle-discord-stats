@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"log/slog"
+	"math/rand"
 	"os"
 	"sort"
 	"sync"
@@ -63,7 +64,9 @@ func (d *Daemon) postReport() {
 		slog.Error("postReport: query", "err", err)
 		return
 	}
-	msg := buildHeader(time.Now()) + "**Top 5 (all time)**\n" + store.FormatEntries(result.Entries)
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	header := buildHeader(time.Now(), currentStreaksLine(d.store), funFactLine(d.store, r))
+	msg := header + "**Top 5 (all time)**\n" + store.FormatEntries(result.Entries)
 	if _, err := d.session.ChannelMessageSend(d.channelID, msg); err != nil {
 		slog.Error("postReport: send", "err", err)
 	}
