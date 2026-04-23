@@ -14,6 +14,9 @@ type FileStore struct {
 	path     string
 	mu       sync.Mutex
 	resolver Resolver
+	// scan, if set, replaces the file read in load(). Tests inject a function
+	// that returns raw (pre-sort, pre-DNF-normalization) results.
+	scan func() ([]WordleResult, error)
 }
 
 func NewFileStore(path string) *FileStore {
@@ -48,6 +51,29 @@ func (f *FileStore) resolveAll(results []WordleResult) []resolvedResult {
 const DNFScore = 7
 
 func (f *FileStore) load() ([]WordleResult, error) {
+	scan := f.scan
+	if scan == nil {
+		scan = f.scanFile
+	}
+	results, err := scan()
+	if err != nil {
+		return nil, err
+	}
+	for i := range results {
+		if !results[i].Complete {
+			results[i].Score = DNFScore
+		}
+	}
+	sort.Slice(results, func(i, j int) bool {
+		if results[i].Day != results[j].Day {
+			return results[i].Day < results[j].Day
+		}
+		return PlayerKey(results[i]) < PlayerKey(results[j])
+	})
+	return results, nil
+}
+
+func (f *FileStore) scanFile() ([]WordleResult, error) {
 	file, err := os.Open(f.path)
 	if os.IsNotExist(err) {
 		return nil, nil
@@ -68,21 +94,9 @@ func (f *FileStore) load() ([]WordleResult, error) {
 		if err := json.Unmarshal(line, &r); err != nil {
 			return nil, err
 		}
-		if !r.Complete {
-			r.Score = DNFScore
-		}
 		results = append(results, r)
 	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-	sort.Slice(results, func(i, j int) bool {
-		if results[i].Day != results[j].Day {
-			return results[i].Day < results[j].Day
-		}
-		return PlayerKey(results[i]) < PlayerKey(results[j])
-	})
-	return results, nil
+	return results, scanner.Err()
 }
 
 func (f *FileStore) persist(results []WordleResult) error {
