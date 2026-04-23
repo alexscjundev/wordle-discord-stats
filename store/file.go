@@ -42,6 +42,11 @@ func (f *FileStore) resolveAll(results []WordleResult) []resolvedResult {
 	return out
 }
 
+// DNFScore is the score assigned to a result where the player started but
+// did not finish. Stored results keep their raw score (0 for DNF); load()
+// applies this interpretation so scoring code sees a real number.
+const DNFScore = 7
+
 func (f *FileStore) load() ([]WordleResult, error) {
 	file, err := os.Open(f.path)
 	if os.IsNotExist(err) {
@@ -62,6 +67,9 @@ func (f *FileStore) load() ([]WordleResult, error) {
 		var r WordleResult
 		if err := json.Unmarshal(line, &r); err != nil {
 			return nil, err
+		}
+		if !r.Complete {
+			r.Score = DNFScore
 		}
 		results = append(results, r)
 	}

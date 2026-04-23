@@ -8,9 +8,6 @@ type resolvedResult struct {
 func computeAverages(results []resolvedResult) map[string]float64 {
 	scores := map[string][]int{}
 	for _, r := range results {
-		if !r.result.Complete {
-			continue
-		}
 		scores[r.name] = append(scores[r.name], r.result.Score)
 	}
 
