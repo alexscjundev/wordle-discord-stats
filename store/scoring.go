@@ -93,12 +93,13 @@ func scoresAtMost(players map[string][]resolvedResult, threshold int) map[string
 // day is played out as a round-robin of 1v1 matches between every pair of
 // players that played that day; the lower score wins (ties split). Ratings
 // carry over between days; unseen players enter at start.
-func totalElo(days map[int][]resolvedResult, start, k float64) map[string]float64 {
+func totalElo(days map[int][]resolvedResult, start float64, k float64, backDays int) map[string]float64 {
 	dayNums := make([]int, 0, len(days))
 	for d := range days {
 		dayNums = append(dayNums, d)
 	}
 	sort.Ints(dayNums)
+	maxDay := dayNums[len(dayNums)-1]
 
 	ratings := map[string]float64{}
 	for _, d := range dayNums {
@@ -107,6 +108,10 @@ func totalElo(days map[int][]resolvedResult, start, k float64) map[string]float6
 			if _, ok := ratings[r.name]; !ok {
 				ratings[r.name] = start
 			}
+		}
+		// Skip elo calculation if days are before the backDays cutoff, if specified.
+		if backDays > 0 && d <= maxDay-backDays {
+			continue
 		}
 		for i := 0; i < len(entries); i++ {
 			for j := i + 1; j < len(entries); j++ {

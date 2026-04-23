@@ -24,6 +24,7 @@ const (
 	minGames    = 20
 	slidingDays = 7
 	topK        = 5
+	eloWind     = 30
 )
 
 // Resolver maps a player key (snowflake or fixed nick) to a display name.
@@ -68,7 +69,7 @@ func (d *Daemon) postReport() {
 
 	msg := header +
 		d.topBlock(":crown: All-time Elo", store.Query{Kind: store.KindTotalElo, Selector: store.SelectorTopK, K: topK, EloStart: eloStart, EloK: eloK}) +
-		d.topBlock(fmt.Sprintf(":hourglass: All-time average (min %d games)", minGames), store.Query{Kind: store.KindAvgAllTime, Selector: store.SelectorTopK, K: topK, MinGames: minGames}) +
+		d.topBlock(fmt.Sprintf(":hourglass: All-time average (min %d games)", minGames), store.Query{Kind: store.KindAvgAllTime, Selector: store.SelectorTopK, K: topK, MinGames: minGames, EloBackDays: eloWind}) +
 		d.topBlock(fmt.Sprintf(":clock1: %d-day sliding average", slidingDays), store.Query{Kind: store.KindAvgSliding, Selector: store.SelectorTopK, K: topK, SlidingDays: slidingDays})
 
 	if _, err := d.session.ChannelMessageSend(d.channelID, msg); err != nil {

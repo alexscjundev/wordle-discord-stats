@@ -187,7 +187,7 @@ func (f *FileStore) computeEntries(q Query) ([]Entry, error) {
 		if err != nil {
 			return nil, err
 		}
-		return valuesToEntries(totalElo(days, q.EloStart, q.EloK)), nil
+		return valuesToEntries(totalElo(days, q.EloStart, q.EloK, q.EloBackDays)), nil
 	case KindCurrentStreak:
 		players, err := f.perPlayer()
 		if err != nil {
