@@ -52,3 +52,30 @@ used as fun fact in daemon report header
 
 count number of times player got <= x
 used as fun fact in daemon report header
+
+## thoughts on implementation
+
+## load
+load function will be used to query info, and should sort by a) wordle day then b) player name to guarantee ordering
+
+### decompose it properly, focus on good interfaces
+
+new query type, bottom k. top k only used for total elo
+
+new query param, query type. one per each query above
+
+query will not fix value like "7" for sliding score or "1500" for total elo, rather allow it as provided input to the query, but fix from what we call from daemon 
+
+every query uses "per player view" except total elo, uses "per day view"
+so decompose into two helpers that call load()
+
+perPlayerResults, map[string][]wordleResult
+perDayResults, map[int][]wordleResult
+
+and call them respectively
+
+### fun facts
+
+only one fun fact per report
+50/50 between all time streak or scores <= x
+if scores <= x, random number between 2 and 4, then random person from the results
