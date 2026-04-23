@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"fmt"
 	"log/slog"
 	"math/rand"
 	"os"
@@ -16,6 +17,13 @@ import (
 const (
 	batchSize    = 100
 	pollInterval = 10 * time.Minute
+
+	// Scoring parameters fixed by the daemon; see docs/features.md.
+	eloStart    = 1500.0
+	eloK        = 32.0
+	minGames    = 20
+	slidingDays = 7
+	topK        = 5
 )
 
 // Resolver maps a player key (snowflake or fixed nick) to a display name.
@@ -55,21 +63,29 @@ func (d *Daemon) Run() {
 }
 
 func (d *Daemon) postReport() {
-	result, err := d.store.Query(store.Query{
-		Kind:     store.KindAvgAllTime,
-		Selector: store.SelectorTopK,
-		K:        5,
-	})
-	if err != nil {
-		slog.Error("postReport: query", "err", err)
-		return
-	}
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	header := buildHeader(time.Now(), currentStreaksLine(d.store), funFactLine(d.store, r))
-	msg := header + "**Top 5 (all time)**\n" + store.FormatEntries(result.Entries)
+
+	msg := header +
+		d.topBlock("All-time Elo", store.Query{Kind: store.KindTotalElo, Selector: store.SelectorTopK, K: topK, EloStart: eloStart, EloK: eloK}) +
+		d.topBlock(fmt.Sprintf("All-time average (min %d games)", minGames), store.Query{Kind: store.KindAvgAllTime, Selector: store.SelectorTopK, K: topK, MinGames: minGames}) +
+		d.topBlock(fmt.Sprintf("%d-day sliding average", slidingDays), store.Query{Kind: store.KindAvgSliding, Selector: store.SelectorTopK, K: topK, SlidingDays: slidingDays})
+
 	if _, err := d.session.ChannelMessageSend(d.channelID, msg); err != nil {
 		slog.Error("postReport: send", "err", err)
 	}
+}
+
+func (d *Daemon) topBlock(title string, q store.Query) string {
+	res, err := d.store.Query(q)
+	if err != nil {
+		slog.Error("postReport: query", "title", title, "err", err)
+		return ""
+	}
+	if len(res.Entries) == 0 {
+		return fmt.Sprintf("**Top %d — %s**\n_(no eligible players yet)_\n\n", q.K, title)
+	}
+	return fmt.Sprintf("**Top %d — %s**\n%s\n", q.K, title, store.FormatEntries(res.Entries))
 }
 
 func (d *Daemon) ingest() {
