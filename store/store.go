@@ -81,6 +81,7 @@ type Query struct {
 	SlidingDays int     // KindAvgSliding
 	EloStart    float64 // KindTotalElo
 	EloK        float64 // KindTotalElo
+	EloBackDays int		// KindTotalElo
 	ScoreAtMost int     // KindScoresAtMost
 }
 
