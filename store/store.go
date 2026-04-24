@@ -1,6 +1,17 @@
 package store
 
-import "fmt"
+import (
+	"fmt"
+	"regexp"
+)
+
+var backslashParenRe = regexp.MustCompile(`\\+([()])`)
+
+// normalizeFixedNick strips backslashes that Discord markdown inserts before
+// parentheses, so \( and \) (and \\( etc.) become ( and ).
+func normalizeFixedNick(s string) string {
+	return backslashParenRe.ReplaceAllString(s, "$1")
+}
 
 type WordleResult struct {
 	GuildID   string
