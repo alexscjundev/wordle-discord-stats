@@ -50,10 +50,6 @@ func (f *FileStore) resolveAll(results []WordleResult) []resolvedResult {
 // applies this interpretation so scoring code sees a real number.
 const DNFScore = 7
 
-// RawLoad returns the raw results from the file without scoring normalization.
-func (f *FileStore) RawLoad() ([]WordleResult, error) {
-	return f.scanFile()
-}
 
 func (f *FileStore) load() ([]WordleResult, error) {
 	scan := f.scan
