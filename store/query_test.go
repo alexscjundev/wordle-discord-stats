@@ -10,8 +10,27 @@ func storeWith(results ...WordleResult) *FileStore {
 	return &FileStore{scan: func() ([]WordleResult, error) { return rs, nil }}
 }
 
+func storeWithNickMap(nickMap map[string]string, results ...WordleResult) *FileStore {
+	rs := results
+	return &FileStore{nickMap: nickMap, scan: func() ([]WordleResult, error) { return rs, nil }}
+}
+
+// staticResolver maps keys to display names for use in tests.
+type staticResolver map[string]string
+
+func (r staticResolver) Get(key string) string {
+	if name, ok := r[key]; ok {
+		return name
+	}
+	return key
+}
+
 func done(day int, nick string, score int) WordleResult {
 	return WordleResult{FixedNick: nick, Day: day, Score: score, Complete: true}
+}
+
+func doneUser(day int, userID string, score int) WordleResult {
+	return WordleResult{UserID: userID, Day: day, Score: score, Complete: true}
 }
 
 func dnf(day int, nick string) WordleResult {
@@ -252,6 +271,42 @@ func TestScoresAtMost(t *testing.T) {
 		res := mustQuery(t, st, Query{Kind: KindScoresAtMost, Selector: SelectorPlayer, Player: "alex", ScoreAtMost: 0})
 		if res.Entries[0].Value != 0 {
 			t.Errorf("got %v, want 0", res.Entries[0].Value)
+		}
+	})
+}
+
+func TestNickMapResolution(t *testing.T) {
+	nickMap := map[string]string{"old_alice": "U1", "also_alice": "U1"}
+	resolver := staticResolver{"U1": "alice", "U2": "bob"}
+
+	t.Run("mapped fixed nick resolves to display name", func(t *testing.T) {
+		st := storeWithNickMap(nickMap, done(1, "old_alice", 3), done(1, "bob", 4))
+		st.SetResolver(resolver)
+		res := mustQuery(t, st, Query{Kind: KindAvgAllTime, Selector: SelectorPlayer, Player: "U1"})
+		if res.Entries[0].Name != "alice" {
+			t.Errorf("got %q, want %q", res.Entries[0].Name, "alice")
+		}
+	})
+
+	t.Run("unmapped fixed nick passes through as raw name", func(t *testing.T) {
+		st := storeWithNickMap(nickMap, done(1, "mystery", 3))
+		st.SetResolver(resolver)
+		res := mustQuery(t, st, Query{Kind: KindAvgAllTime, Selector: SelectorPlayer, Player: "mystery"})
+		if res.Entries[0].Name != "mystery" {
+			t.Errorf("got %q, want %q", res.Entries[0].Name, "mystery")
+		}
+	})
+
+	t.Run("fixed nick results merge with userID results for same player", func(t *testing.T) {
+		st := storeWithNickMap(nickMap,
+			done(1, "old_alice", 2),    // fixed nick → U1 → alice
+			done(2, "also_alice", 4),   // another fixed nick → U1 → alice
+			doneUser(3, "U1", 6),       // direct snowflake → alice
+		)
+		st.SetResolver(resolver)
+		res := mustQuery(t, st, Query{Kind: KindAvgAllTime, Selector: SelectorPlayer, Player: "U1"})
+		if res.Entries[0].Value != 4 { // (2+4+6)/3
+			t.Errorf("got %v, want 4", res.Entries[0].Value)
 		}
 	})
 }

@@ -57,6 +57,17 @@ func (c *NickCache) Refresh() {
 	slog.Debug("nickcache: refreshed", "count", len(fresh))
 }
 
+// Snapshot returns a copy of the current snowflake → display name map.
+func (c *NickCache) Snapshot() map[string]string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	out := make(map[string]string, len(c.nicks))
+	for k, v := range c.nicks {
+		out[k] = v
+	}
+	return out
+}
+
 func (c *NickCache) Start(interval time.Duration) {
 	c.Refresh()
 	go func() {

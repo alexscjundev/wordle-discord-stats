@@ -14,13 +14,14 @@ type FileStore struct {
 	path     string
 	mu       sync.Mutex
 	resolver Resolver
+	nickMap  map[string]string // fixed nick → snowflake; nil means no mapping
 	// scan, if set, replaces the file read in load(). Tests inject a function
 	// that returns raw (pre-sort, pre-DNF-normalization) results.
 	scan func() ([]WordleResult, error)
 }
 
-func NewFileStore(path string) *FileStore {
-	return &FileStore{path: path}
+func NewFileStore(path string, nickMap map[string]string) *FileStore {
+	return &FileStore{path: path, nickMap: nickMap}
 }
 
 func (f *FileStore) SetResolver(r Resolver) {
@@ -29,8 +30,24 @@ func (f *FileStore) SetResolver(r Resolver) {
 	f.resolver = r
 }
 
+// resolveName is the single chokepoint through which every stored result
+// becomes a display name.
+//
+// For UserID results the key is the Discord snowflake; the resolver
+// (nickcache) maps it to the player's current guild nick or username.
+//
+// For FixedNick results the key is first looked up in the nick map.  If a
+// mapping exists the fixed nick is replaced with its target snowflake and
+// the resolver finishes the job; if not, the fixed nick passes through the
+// resolver unchanged (nickcache returns it as-is) and appears in output
+// under its raw name.
 func (f *FileStore) resolveName(r WordleResult) string {
 	key := PlayerKey(r)
+	if r.FixedNick != "" {
+		if snowflake, ok := f.nickMap[r.FixedNick]; ok {
+			key = snowflake
+		}
+	}
 	if f.resolver != nil {
 		return f.resolver.Get(key)
 	}

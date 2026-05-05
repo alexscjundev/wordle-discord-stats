@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -26,7 +27,14 @@ func main() {
 	botUserID := os.Getenv("WORDLE_BOT_USER_ID")
 	imgparseBin := envOr("IMGPARSE_BIN", "/app/imgparse")
 
-	st := store.NewFileStore(envOr("RESULTS_FILE", "wordle_results.json"))
+	cfg, err := daemon.LoadConfig(envOr("DAEMON_CONFIG_FILE", "daemon_config.toml"))
+	if err != nil {
+		slog.Error("daemon config", "err", err)
+		os.Exit(1)
+	}
+	slog.Info("daemon config loaded", "config", fmt.Sprintf("%+v", cfg))
+
+	st := store.NewFileStore(envOr("RESULTS_FILE", "wordle_results.json"), cfg.NickMap)
 
 	b, err := bot.New(token, guildID, st, nil)
 	if err != nil {
@@ -42,7 +50,7 @@ func main() {
 
 	if channelID != "" && botUserID != "" {
 		cursor := daemon.NewFileCursor(envOr("CURSOR_FILE", "cursor.txt"))
-		d := daemon.New(b.Session(), channelID, botUserID, imgparseBin, cursor, st, nc)
+		d := daemon.New(b.Session(), channelID, botUserID, imgparseBin, cursor, st, nc, cfg)
 		go d.Run()
 	} else {
 		slog.Info("DISCORD_CHANNEL_ID or WORDLE_BOT_USER_ID not set, daemon disabled")
