@@ -1,0 +1,154 @@
+package main
+
+import (
+	"bufio"
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"os"
+	"sort"
+
+	"wordle-discord-stats/nickcache"
+	"wordle-discord-stats/store"
+
+	"github.com/bwmarrin/discordgo"
+)
+
+func main() {
+	token := mustEnv("DISCORD_TOKEN")
+	guildID := mustEnv("DISCORD_GUILD_ID")
+	resultsPath := envOr("RESULTS_FILE", "wordle_results.json")
+	configPath := envOr("NICK_MAP_FILE", "nick_map.json")
+
+	session, err := discordgo.New("Bot " + token)
+	if err != nil {
+		fatalf("discord session: %v", err)
+	}
+
+	nc := nickcache.New(session, guildID)
+	nc.Refresh()
+
+	fixedNicks, err := scanFixedNicks(resultsPath)
+	if err != nil {
+		fatalf("scan results: %v", err)
+	}
+
+	_, statErr := os.Stat(configPath)
+	if os.IsNotExist(statErr) {
+		printInfo(nc, fixedNicks)
+		return
+	}
+	if statErr != nil {
+		fatalf("stat %s: %v", configPath, statErr)
+	}
+
+	verifyConfig(configPath, fixedNicks)
+}
+
+// printInfo prints the nickcache snapshot and all fixed nicks so an admin can
+// construct a nick_map.json.
+func printInfo(nc *nickcache.NickCache, fixedNicks map[string]struct{}) {
+	snap := nc.Snapshot()
+	ids := make([]string, 0, len(snap))
+	for id := range snap {
+		ids = append(ids, id)
+	}
+	sort.Slice(ids, func(i, j int) bool { return snap[ids[i]] < snap[ids[j]] })
+
+	fmt.Println("snowflake → display name:")
+	for _, id := range ids {
+		fmt.Printf("  %-20s  %s\n", id, snap[id])
+	}
+
+	fmt.Println("\nfixed nicks (all unmapped):")
+	for _, n := range sortedKeys(fixedNicks) {
+		fmt.Printf("  %q\n", n)
+	}
+}
+
+// verifyConfig checks that every fixed nick in the store is mapped in the
+// config file. Exits 1 if any are missing.
+func verifyConfig(configPath string, fixedNicks map[string]struct{}) {
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		fatalf("read %s: %v", configPath, err)
+	}
+	var cfg map[string]string
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		fatalf("parse %s: %v", configPath, err)
+	}
+
+	var missing []string
+	for nick := range fixedNicks {
+		if _, ok := cfg[nick]; !ok {
+			missing = append(missing, nick)
+		}
+	}
+	sort.Strings(missing)
+
+	if len(missing) > 0 {
+		fmt.Fprintln(os.Stderr, "unmapped fixed nicks:")
+		for _, n := range missing {
+			fmt.Fprintf(os.Stderr, "  %q\n", n)
+		}
+		os.Exit(1)
+	}
+	fmt.Println("ok: all fixed nicks are mapped")
+}
+
+func scanFixedNicks(path string) (map[string]struct{}, error) {
+	f, err := os.Open(path)
+	if os.IsNotExist(err) {
+		return map[string]struct{}{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	out := map[string]struct{}{}
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		line := bytes.TrimSpace(sc.Bytes())
+		if len(line) == 0 {
+			continue
+		}
+		var r store.WordleResult
+		if err := json.Unmarshal(line, &r); err != nil {
+			return nil, err
+		}
+		if r.FixedNick != "" {
+			out[r.FixedNick] = struct{}{}
+		}
+	}
+	return out, sc.Err()
+}
+
+func sortedKeys(m map[string]struct{}) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func mustEnv(key string) string {
+	v := os.Getenv(key)
+	if v == "" {
+		fatalf("%s not set", key)
+	}
+	return v
+}
+
+func envOr(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}
+
+func fatalf(format string, args ...any) {
+	fmt.Fprintf(os.Stderr, format+"\n", args...)
+	os.Exit(1)
+}
