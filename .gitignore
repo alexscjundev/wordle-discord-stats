@@ -1,2 +1,5 @@
 imgparse/target/
 values.sh
+cursor.txt
+wordle_results.json
+daemon_config.toml
