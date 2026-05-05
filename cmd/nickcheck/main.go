@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"os"
 	"sort"
 
@@ -37,7 +36,7 @@ func main() {
 
 	_, statErr := os.Stat(configPath)
 	if os.IsNotExist(statErr) {
-		slog.Info("config file not found, printing info", "path", configPath)
+		fmt.Printf("daemon config does not exist (%s) — showing current state\n\n", configPath)
 		printInfo(nc, fixedNicks)
 		return
 	}
@@ -51,12 +50,12 @@ func main() {
 	}
 
 	if len(cfg.NickMap) == 0 {
-		slog.Info("config has no nick_map entries, printing info")
+		fmt.Println("config does not have a nick_map — showing current state\n")
 		printInfo(nc, fixedNicks)
 		return
 	}
 
-	verifyNickMap(cfg.NickMap, fixedNicks)
+	verifyNickMap(cfg.NickMap, fixedNicks, nc)
 }
 
 // printInfo prints the nickcache snapshot and all fixed nicks so an admin can
@@ -81,8 +80,9 @@ func printInfo(nc *nickcache.NickCache, fixedNicks map[string]struct{}) {
 }
 
 // verifyNickMap checks that every fixed nick in the store is present in the
-// nick_map. Exits 1 if any are missing.
-func verifyNickMap(nickMap map[string]string, fixedNicks map[string]struct{}) {
+// nick_map. Exits 1 if any are missing. On success, prints each resolved
+// display name with the user IDs and fixed nicks that map to it.
+func verifyNickMap(nickMap map[string]string, fixedNicks map[string]struct{}, nc *nickcache.NickCache) {
 	var missing []string
 	for nick := range fixedNicks {
 		if _, ok := nickMap[nick]; !ok {
@@ -92,13 +92,46 @@ func verifyNickMap(nickMap map[string]string, fixedNicks map[string]struct{}) {
 	sort.Strings(missing)
 
 	if len(missing) > 0 {
-		fmt.Fprintln(os.Stderr, "unmapped fixed nicks:")
+		fmt.Fprintln(os.Stderr, "not all nicks are mapped — missing:")
 		for _, n := range missing {
 			fmt.Fprintf(os.Stderr, "  %q\n", n)
 		}
 		os.Exit(1)
 	}
-	fmt.Println("ok: all fixed nicks are mapped")
+
+	fmt.Println("all nicks are mapped:\n")
+	// Group fixed nicks by their target snowflake.
+	type entry struct {
+		snowflake  string
+		fixedNicks []string
+	}
+	bySnowflake := map[string]*entry{}
+	for nick, snowflake := range nickMap {
+		e, ok := bySnowflake[snowflake]
+		if !ok {
+			e = &entry{snowflake: snowflake}
+			bySnowflake[snowflake] = e
+		}
+		e.fixedNicks = append(e.fixedNicks, nick)
+	}
+
+	// Sort entries by resolved display name.
+	entries := make([]*entry, 0, len(bySnowflake))
+	for _, e := range bySnowflake {
+		sort.Strings(e.fixedNicks)
+		entries = append(entries, e)
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		return nc.Get(entries[i].snowflake) < nc.Get(entries[j].snowflake)
+	})
+
+	for _, e := range entries {
+		fmt.Printf("%s:\n", nc.Get(e.snowflake))
+		fmt.Printf("  user_id:    %s\n", e.snowflake)
+		for _, nick := range e.fixedNicks {
+			fmt.Printf("  fixed_nick: %s\n", nick)
+		}
+	}
 }
 
 func scanFixedNicks(path string) (map[string]struct{}, error) {
