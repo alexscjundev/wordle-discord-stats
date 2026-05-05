@@ -5,9 +5,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"sort"
 
+	"wordle-discord-stats/daemon"
 	"wordle-discord-stats/nickcache"
 	"wordle-discord-stats/store"
 
@@ -18,7 +20,7 @@ func main() {
 	token := mustEnv("DISCORD_TOKEN")
 	guildID := mustEnv("DISCORD_GUILD_ID")
 	resultsPath := envOr("RESULTS_FILE", "wordle_results.json")
-	configPath := envOr("NICK_MAP_FILE", "nick_map.json")
+	configPath := envOr("DAEMON_CONFIG_FILE", "daemon_config.toml")
 
 	session, err := discordgo.New("Bot " + token)
 	if err != nil {
@@ -35,6 +37,7 @@ func main() {
 
 	_, statErr := os.Stat(configPath)
 	if os.IsNotExist(statErr) {
+		slog.Info("config file not found, printing info", "path", configPath)
 		printInfo(nc, fixedNicks)
 		return
 	}
@@ -42,11 +45,22 @@ func main() {
 		fatalf("stat %s: %v", configPath, statErr)
 	}
 
-	verifyConfig(configPath, fixedNicks)
+	cfg, err := daemon.LoadConfig(configPath)
+	if err != nil {
+		fatalf("load config: %v", err)
+	}
+
+	if len(cfg.NickMap) == 0 {
+		slog.Info("config has no nick_map entries, printing info")
+		printInfo(nc, fixedNicks)
+		return
+	}
+
+	verifyNickMap(cfg.NickMap, fixedNicks)
 }
 
 // printInfo prints the nickcache snapshot and all fixed nicks so an admin can
-// construct a nick_map.json.
+// populate the [nick_map] section of daemon_config.toml.
 func printInfo(nc *nickcache.NickCache, fixedNicks map[string]struct{}) {
 	snap := nc.Snapshot()
 	ids := make([]string, 0, len(snap))
@@ -66,21 +80,12 @@ func printInfo(nc *nickcache.NickCache, fixedNicks map[string]struct{}) {
 	}
 }
 
-// verifyConfig checks that every fixed nick in the store is mapped in the
-// config file. Exits 1 if any are missing.
-func verifyConfig(configPath string, fixedNicks map[string]struct{}) {
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		fatalf("read %s: %v", configPath, err)
-	}
-	var cfg map[string]string
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		fatalf("parse %s: %v", configPath, err)
-	}
-
+// verifyNickMap checks that every fixed nick in the store is present in the
+// nick_map. Exits 1 if any are missing.
+func verifyNickMap(nickMap map[string]string, fixedNicks map[string]struct{}) {
 	var missing []string
 	for nick := range fixedNicks {
-		if _, ok := cfg[nick]; !ok {
+		if _, ok := nickMap[nick]; !ok {
 			missing = append(missing, nick)
 		}
 	}

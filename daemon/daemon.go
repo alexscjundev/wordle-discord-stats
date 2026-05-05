@@ -16,7 +16,8 @@ import (
 )
 
 type DaemonConfig struct {
-	DisableMessages bool `toml:"disable_messages"`
+	DisableMessages bool              `toml:"disable_messages"`
+	NickMap         map[string]string `toml:"nick_map"`
 }
 
 // LoadConfig reads a TOML daemon config file. Missing file returns a zero
