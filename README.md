@@ -88,7 +88,7 @@ source values.sh && go run ./cmd/nickcheck
 ### Docker
 
 ```sh
-docker build -t wordle-bot .
+docker build -t wordle-stats .
 ```
 
 Run the bot (default):
@@ -100,7 +100,7 @@ docker run --rm \
   -e DISCORD_CHANNEL_ID=... \
   -e WORDLE_BOT_USER_ID=... \
   -v $(pwd)/data:/data \
-  wordle-bot
+  wordle-stats
 ```
 
 Run `nickcheck` against the same data volume:
@@ -110,7 +110,7 @@ docker run --rm \
   -e DISCORD_TOKEN=... \
   -e DISCORD_GUILD_ID=... \
   -v $(pwd)/data:/data \
-  wordle-bot ./nickcheck
+  wordle-stats ./nickcheck
 ```
 
 State (results, cursor, and `daemon_config.toml`) is persisted in the `/data` volume.

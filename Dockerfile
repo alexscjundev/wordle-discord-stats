@@ -10,7 +10,7 @@ WORKDIR /build
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -o wordle-bot . && \
+RUN CGO_ENABLED=0 go build -o wordle-stats . && \
     CGO_ENABLED=0 go build -o nickcheck ./cmd/nickcheck
 
 FROM debian:bookworm-slim
@@ -19,7 +19,7 @@ WORKDIR /app
 
 COPY --from=imgparse-builder /build/imgparse/target/release/imgparse ./imgparse
 COPY --from=imgparse-builder /build/imgparse/models ./models
-COPY --from=go-builder /build/wordle-bot ./wordle-bot
+COPY --from=go-builder /build/wordle-stats ./wordle-stats
 COPY --from=go-builder /build/nickcheck ./nickcheck
 
 ENV IMGPARSE_BIN=/app/imgparse \
@@ -29,4 +29,4 @@ ENV IMGPARSE_BIN=/app/imgparse \
     DAEMON_CONFIG_FILE=/data/daemon_config.toml
 
 VOLUME ["/data"]
-CMD ["./wordle-bot"]
+CMD ["./wordle-stats"]
