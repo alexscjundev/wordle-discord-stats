@@ -11,8 +11,26 @@ import (
 
 	"wordle-discord-stats/store"
 
+	"github.com/BurntSushi/toml"
 	"github.com/bwmarrin/discordgo"
 )
+
+type DaemonConfig struct {
+	DisableMessages bool `toml:"disable_messages"`
+}
+
+// LoadConfig reads a TOML daemon config file. Missing file returns a zero
+// DaemonConfig (all defaults).
+func LoadConfig(path string) (DaemonConfig, error) {
+	var cfg DaemonConfig
+	if _, err := toml.DecodeFile(path, &cfg); err != nil {
+		if os.IsNotExist(err) {
+			return DaemonConfig{}, nil
+		}
+		return DaemonConfig{}, err
+	}
+	return cfg, nil
+}
 
 const (
 	batchSize    = 100
@@ -40,9 +58,10 @@ type Daemon struct {
 	cursor      MessageCursor
 	store       store.Store
 	resolver    Resolver
+	cfg         DaemonConfig
 }
 
-func New(session *discordgo.Session, channelID, botUserID, imgparseBin string, cursor MessageCursor, st store.Store, resolver Resolver) *Daemon {
+func New(session *discordgo.Session, channelID, botUserID, imgparseBin string, cursor MessageCursor, st store.Store, resolver Resolver, cfg DaemonConfig) *Daemon {
 	return &Daemon{
 		session:     session,
 		channelID:   channelID,
@@ -51,6 +70,7 @@ func New(session *discordgo.Session, channelID, botUserID, imgparseBin string, c
 		cursor:      cursor,
 		store:       st,
 		resolver:    resolver,
+		cfg:         cfg,
 	}
 }
 
@@ -172,7 +192,7 @@ func (d *Daemon) ingest() {
 	}
 
 	slog.Info("daemon: ingest done", "next_poll", pollInterval)
-	if savedNew {
+	if savedNew && !d.cfg.DisableMessages {
 		d.postReport()
 	}
 }
